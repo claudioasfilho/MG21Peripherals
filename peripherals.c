@@ -26,6 +26,8 @@
 #include "sleep.h"
 #include <string.h>
 #include <stdio.h>
+#include "usage_iadc_ldma.h"
+#include "em_prs.h"
 
 /* Device initialization header */
 #include "hal-config.h"
@@ -175,21 +177,35 @@ void GPIOHandler(void)
  *****************************************************************************/
 static uint8_t desiredDutyCycle;
 
+#if 0
+void InitPRS()
+{
+	CMU_ClockEnable(cmuClock_PRS, true);
+	/* Use ADC SINGLE as an ASYNC PRS producer on CH0 */
+	PRS_SourceAsyncSignalSet(0, PRS_CH_CTRL_SOURCESEL_ADC0, PRS_CH_CTRL_SIGSEL_ADC0SINGLE);
 
-void InitPWM1()
+
+	PRS_SourceSignalSet(0,
+	                         uint32_t source,
+	                         uint32_t signal,
+	                         PRS_Edge_TypeDef edge);
+}
+#endif
+
+void InitPWM2()
 {
 
   // Enable clock to GPIO and TIMER0
 
-  CMU_ClockEnable(cmuClock_TIMER3, true);
+  CMU_ClockEnable(cmuClock_TIMER0, true);
 
 
-// $[TIMER3 I/O setup]
+// $[TIMER0 I/O setup]
 /* Set up CC0 */
-  // Route TIMER3 CC0 output to PA6
-  GPIO->TIMERROUTE[3].ROUTEEN  = GPIO_TIMER_ROUTEEN_CC0PEN;
-  GPIO->TIMERROUTE[3].CC0ROUTE = (PWM_PORT << _GPIO_TIMER_CC0ROUTE_PORT_SHIFT)
-					| (PWM_PIN << _GPIO_TIMER_CC0ROUTE_PIN_SHIFT);
+  // Route TIMER0 CC0 output to PA6
+  GPIO->TIMERROUTE[0].ROUTEEN  = GPIO_TIMER_ROUTEEN_CC0PEN;
+  GPIO->TIMERROUTE[0].CC0ROUTE = (PWM2_PORT << _GPIO_TIMER_CC0ROUTE_PORT_SHIFT)
+					| (PWM2_PIN << _GPIO_TIMER_CC0ROUTE_PIN_SHIFT);
 
 	TIMER_Init_TypeDef init = TIMER_INIT_DEFAULT;
 
@@ -206,10 +222,10 @@ void InitPWM1()
 	init.oneShot = 0;
 	init.count2x = 0;
 	init.ati = 0;
-	TIMER_Init(TIMER3, &init);
-	// [TIMER3 initialization]$
+	TIMER_Init(TIMER0, &init);
+	// [TIMER0 initialization]$
 
-	// $[TIMER3 CC0 init]
+	// $[TIMER0 CC0 init]
 	TIMER_InitCC_TypeDef initCC0 = TIMER_INITCC_DEFAULT;
 
 	initCC0.prsInput = false;
@@ -223,14 +239,75 @@ void InitPWM1()
 	initCC0.cmoa = timerOutputActionNone;
 	initCC0.coist = 0;
 	initCC0.outInvert = 0;
-	TIMER_InitCC(TIMER3, 0, &initCC0);
-	// [TIMER3 CC0 init]$0
+	TIMER_InitCC(TIMER0, 0, &initCC0);
+	// [TIMER0 CC0 init]$0
+
+	CMU_ClockEnable(cmuClock_PRS, true);
+
+	PRS_SourceSignalSet(1, PRS_SYNC_CH_CTRL_SOURCESEL_TIMER0 , _PRS_SYNC_CH_CTRL_SIGSEL_TIMER0OF, prsEdgePos);
 
 	PWMObj.all=0;
 	PWMObj.bits.Enabled=1;
 
 }
 
+
+
+
+void InitPWM1()
+{
+
+  // Enable clock to GPIO and TIMER0
+
+  CMU_ClockEnable(cmuClock_TIMER1, true);
+
+
+// $[TIMER1 I/O setup]
+/* Set up CC0 */
+  // Route TIMER1 CC0 output to PA6
+  GPIO->TIMERROUTE[1].ROUTEEN  = GPIO_TIMER_ROUTEEN_CC0PEN;
+  GPIO->TIMERROUTE[1].CC0ROUTE = (PWM_PORT << _GPIO_TIMER_CC0ROUTE_PORT_SHIFT)
+					| (PWM_PIN << _GPIO_TIMER_CC0ROUTE_PIN_SHIFT);
+
+	TIMER_Init_TypeDef init = TIMER_INIT_DEFAULT;
+
+	init.enable = 0;
+	init.debugRun = 1;
+	init.dmaClrAct = 0;
+	init.sync = 0;
+	init.clkSel = timerClkSelCascade;//timerClkSelHFPerClk;//timerClkSelCascade;
+	init.prescale = timerPrescale1;
+	init.fallAction = timerInputActionNone;
+	init.riseAction =  timerInputActionNone;
+	init.mode = timerModeUp;
+	init.quadModeX4 = 0;
+	init.oneShot = 0;
+	init.count2x = 0;
+	init.ati = 0;
+	TIMER_Init(TIMER1, &init);
+	// [TIMER1 initialization]$
+
+	// $[TIMER1 CC0 init]
+	TIMER_InitCC_TypeDef initCC0 = TIMER_INITCC_DEFAULT;
+
+	initCC0.prsInput = true;
+	initCC0.prsSel = timerPRSSELCh1;
+	initCC0.edge = timerEdgeRising;
+	initCC0.mode = timerCCModePWM;
+	initCC0.eventCtrl = timerEventEveryEdge;
+	initCC0.filter = 0;
+	initCC0.cofoa = timerOutputActionNone;
+	initCC0.cufoa = timerOutputActionNone;
+	initCC0.cmoa = timerOutputActionNone;
+	initCC0.coist = 0;
+	initCC0.outInvert = 0;
+	TIMER_InitCC(TIMER1, 0, &initCC0);
+	// [TIMER1 CC0 init]$0
+
+	PWMObj.all=0;
+	PWMObj.bits.Enabled=1;
+
+}
 
 void UpdatePWM1(uint8_t DutyCycle) //desiredDutyCycle varies from 0-100;
 {
@@ -248,6 +325,38 @@ void UpdatePWM1(uint8_t DutyCycle) //desiredDutyCycle varies from 0-100;
 	PWMObj.bits.Status=1;
 }
 
+void ChangePWM2output() //desiredDutyCycle varies from 0-100;
+{
+	uint32_t PWMFrequency;
+	uint32_t CC1DutyCycle;
+
+
+	PWMFrequency = BSP_CLK_HFXO_FREQ / PWM_FREQ;
+
+	if (desiredDutyCycle>0)
+	{
+
+		CC1DutyCycle = (desiredDutyCycle*PWMFrequency)/100;
+		CC1DutyCycle =CC1DutyCycle ;
+
+	}
+	else  {CC1DutyCycle=0;}
+	if (desiredDutyCycle>100) CC1DutyCycle=99;
+
+
+	TIMER_Enable(TIMER0,0);	//Disables Timer
+
+	/* set PWM period */
+	TIMER_TopSet (TIMER0, PWMFrequency);
+
+	/* Set PWM duty cycle to 50% */
+	TIMER_CompareSet (TIMER0, 0, CC1DutyCycle);
+
+	CC1DutyCycle = CC1DutyCycle;
+
+	TIMER_Enable(TIMER0,1);
+
+}
 void ChangePWMoutput() //desiredDutyCycle varies from 0-100;
 {
 	uint32_t PWMFrequency;
@@ -267,17 +376,17 @@ void ChangePWMoutput() //desiredDutyCycle varies from 0-100;
 	if (desiredDutyCycle>100) CC1DutyCycle=99;
 
 
-	TIMER_Enable(TIMER3,0);	//Disables Timer
+	TIMER_Enable(TIMER1,0);	//Disables Timer
 
 	/* set PWM period */
-	TIMER_TopSet (TIMER3, PWMFrequency);
+	TIMER_TopSet (TIMER1, PWMFrequency);
 
 	/* Set PWM duty cycle to 50% */
-	TIMER_CompareSet (TIMER3, 0, CC1DutyCycle);
+	TIMER_CompareSet (TIMER1, 0, CC1DutyCycle);
 
 	CC1DutyCycle = CC1DutyCycle;
 
-	TIMER_Enable(TIMER3,1);
+	TIMER_Enable(TIMER1,1);
 
 }
 
@@ -435,19 +544,27 @@ void InitPeripherals()
 {
 
 
-	  // Initialize the IADC
-	    initIADC();
-	    // Start single
-	    StartADC0Sample();
 
-	printLog("InitGPIO\n\r");
-		InitGPIO();
-	printLog("InitPWM\n\r");
-	    InitPWM1();
-	    UpdatePWM1(50);
-	    ChangePWMoutput();
-	    printLog("PWM at 50%%\n\r");
+	  InitGPIO();
+	  InitPWM1();
+	  InitPWM2();
 
+
+	  UpdatePWM1(50);
+	  ChangePWMoutput();
+
+	  UpdatePWM1(10);
+	  ChangePWM2output();
+
+	 //   initSingleIADC();
+
+	   // initLdmaPingPong();
+
+	    // Start scan
+
+	   // IADC_command(IADC0, iadcCmdStartSingle);
+
+	  //  printf("Init Peripherals\r\n");
 }
 
 

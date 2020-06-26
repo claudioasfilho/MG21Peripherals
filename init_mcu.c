@@ -118,8 +118,8 @@ static void initMcu_clocks(void)
   CMU_ClockSelectSet(cmuClock_WDOG1, cmuSelect_LFXO);
 
   //Claudio
-  //CMU_ClockSelectSet(cmuClock_GPIO, cmuSelect_HFXO);
-  //CMU_ClockSelectSet(cmuClock_TIMER3, cmuSelect_HFXO);
+
+  CMU_ClockSelectSet(cmuClock_EM01GRPACLK, cmuSelect_HFRCODPLL);
 
 }
 

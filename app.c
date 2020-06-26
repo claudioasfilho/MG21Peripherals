@@ -40,18 +40,12 @@ void appMain(gecko_configuration_t *pconfig)
   pconfig->sleep.flags = 0;
 #endif
 
-  //InitPeripherals();
-
-  InitGPIO();
-  InitPWM1();
-
-  UpdatePWM1(50);
-  ChangePWMoutput();
+  InitPeripherals();
 
   /* Initialize debug prints. Note: debug prints are off by default. See DEBUG_LEVEL in app.h */
   initLog();
 
-  printLog("Peripherals initialized \r\n");
+
 
 
   /* Initialize stack */

@@ -26,6 +26,8 @@
 
 #define PWM_PIN                               (3U)
 #define PWM_PORT                              (gpioPortC)
+#define PWM2_PIN                               (5U)
+#define PWM2_PORT                              (gpioPortC)
 
 #if 0
 #define HAL_SERIAL_PORT_USART1			BSP_BCC_USART
