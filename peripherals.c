@@ -192,6 +192,7 @@ void InitPRS()
 }
 #endif
 
+#if 0
 void InitPWM2()
 {
 
@@ -251,9 +252,6 @@ void InitPWM2()
 
 }
 
-
-
-
 void InitPWM1()
 {
 
@@ -275,7 +273,7 @@ void InitPWM1()
 	init.debugRun = 1;
 	init.dmaClrAct = 0;
 	init.sync = 0;
-	init.clkSel = timerClkSelCascade;//timerClkSelHFPerClk;//timerClkSelCascade;
+	init.clkSel = timerClkSelHFPerClk;//timerClkSelHFPerClk;//timerClkSelCascade;
 	init.prescale = timerPrescale1;
 	init.fallAction = timerInputActionNone;
 	init.riseAction =  timerInputActionNone;
@@ -308,6 +306,165 @@ void InitPWM1()
 	PWMObj.bits.Enabled=1;
 
 }
+
+
+
+#else
+	/***************************************************************************//**
+	 * @brief   PWM_GEN
+	 * 		initialize PWM2 using TIMER0 CC0
+	 *
+	 * 		route out to PA6
+	 ******************************************************************************/
+
+/***************************************************************************//**
+ * @brief	Global Variables
+ ******************************************************************************/
+static uint8_t desiredDutyCycle = 50;
+
+/***************************************************************************//**
+ * @brief	Initialize PWM_GEN on TIMER0
+ *
+ * 		TIMER0 in PWM mode on CC0
+ * 		TIMER0 will be a prs producer on ch0
+ ******************************************************************************/
+void InitPWM2(void) {
+
+	/* enable timer0 clock */
+	CMU_ClockEnable(cmuClock_TIMER0, true);
+
+	/* route timer0 to gpio */
+	GPIO->TIMERROUTE[0].ROUTEEN = GPIO_TIMER_ROUTEEN_CC0PEN;
+	GPIO->TIMERROUTE[0].CC0ROUTE = (PWM2_PORT << _GPIO_TIMER_CC0ROUTE_PORT_SHIFT) |
+										(PWM2_PIN << _GPIO_TIMER_CC0ROUTE_PIN_SHIFT);
+
+	/***********************************************************************//**
+	 * initialize timer
+	 * 		don't enable immediately
+	 * 		continue running if debug
+	 **************************************************************************/
+	TIMER_Init_TypeDef initTimer = TIMER_INIT_DEFAULT;
+	initTimer.enable = false;
+	initTimer.debugRun = true;
+	TIMER_Init(TIMER0, &initTimer);
+
+
+	/***********************************************************************//**
+	 * initialize timer compare/capture mode
+	 * 		initialize in pwm mode on CC0
+	 **************************************************************************/
+	TIMER_InitCC_TypeDef initCC = TIMER_INITCC_DEFAULT;
+	initCC.mode = timerCCModePWM;
+	initCC.prsOutput = timerPrsOutputPulse;
+	TIMER_InitCC(TIMER0, 0, &initCC);
+
+
+	/* set the top value */
+	TIMER_TopSet(TIMER0, CMU_ClockFreqGet(cmuClock_TIMER0)/PWM_FREQ);
+
+
+	/* set the compare value */
+	TIMER_CompareSet(TIMER0, 0, (TIMER_TopGet(TIMER0) * 10) / 100);
+
+}
+
+
+/***************************************************************************//**
+ * @brief	Initialize PWM on TIMER1
+ *
+ * 		TIMER1 in PWM mode on CC0
+ * 		TIMER1 will be a prs consumer on ch0
+ ******************************************************************************/
+void InitPWM1(void) {
+
+	/* enable timer1 clock */
+	CMU_ClockEnable(cmuClock_TIMER1, true);
+
+	/* route timer1 to gpio */
+	GPIO->TIMERROUTE[1].ROUTEEN = GPIO_TIMER_ROUTEEN_CC0PEN;
+	GPIO->TIMERROUTE[1].CC0ROUTE = (PWM_PORT << _GPIO_TIMER_CC0ROUTE_PORT_SHIFT) |
+										(PWM_PIN << _GPIO_TIMER_CC0ROUTE_PIN_SHIFT);
+
+	/***********************************************************************//**
+	 * initialize timer
+	 * 		don't enable immediately
+	 * 		continue running if debug
+	 * 		reload on falling edge input
+	 * 		only once
+	 **************************************************************************/
+	TIMER_Init_TypeDef initTimer = TIMER_INIT_DEFAULT;
+	initTimer.enable = false;
+	initTimer.debugRun = true;
+	initTimer.fallAction = timerInputActionReloadStart;
+	initTimer.oneShot = false;
+	TIMER_Init(TIMER1, &initTimer);
+
+
+	/***********************************************************************//**
+	 * initialize timer compare/capture mode
+	 * 		initialize in pwm mode on CC0
+	 * 		prsInput from ch0
+	 **************************************************************************/
+	TIMER_InitCC_TypeDef initCC = TIMER_INITCC_DEFAULT;
+	initCC.mode = timerCCModePWM;
+	initCC.prsInput = true;
+	initCC.prsSel = 0;
+	initCC.prsInputType = timerPrsInputAsyncPulse;
+	//initCC.edge = timerEdgeFalling;
+	TIMER_InitCC(TIMER1, 0, &initCC);
+
+
+	/* set the top value */
+	TIMER_TopSet(TIMER1, CMU_ClockFreqGet(cmuClock_TIMER1)/(2*PWM_FREQ));
+
+	/* set the compare value */
+	TIMER_CompareSet(TIMER1, 0, (TIMER_TopGet(TIMER1) * desiredDutyCycle * 2) / 100);
+
+}
+
+
+void InitPRS(void) {
+	CMU_ClockEnable(cmuClock_PRS, true);
+
+	/* set the producer */
+	PRS_SourceAsyncSignalSet(0, PRS_ASYNC_CH_CTRL_SOURCESEL_TIMER0, PRS_ASYNC_CH_CTRL_SIGSEL_TIMER0CC0);
+
+	/* set the logic */
+	//PRS_Combine(0, 0, prsLogic_A_OR_B);
+
+	/* set the consumer */
+	// route output to some where.
+	//PRS_PinOutput(0, prsTypeAsync, gpioPortA, 7);
+	PRS_ConnectConsumer(0, prsTypeAsync, prsConsumerTIMER1_CC0);
+
+}
+
+#endif
+
+
+/***************************************************************************//**
+ * @brief	Initialize PWMs on board
+ *
+ * 		initialize PWM1 and PWM2
+ ******************************************************************************/
+void InitPWMs(void) {
+	/* ensure clocks for gpio are enabled */
+	CMU_ClockEnable(cmuClock_GPIO, true);
+	GPIO_PinModeSet(PWM2_PORT, PWM2_PIN, gpioModePushPull, 0);
+	GPIO_PinModeSet(PWM_PORT, PWM_PIN, gpioModePushPull, 0);
+	GPIO_PinModeSet(gpioPortA, 7, gpioModePushPull, 0);
+
+	/* enable clock for prs */
+	InitPRS();
+
+	InitPWM2();		// pwm gen
+	InitPWM1();
+
+	TIMER_Enable(TIMER0, true);
+	TIMER_Enable(TIMER1, true);
+}
+
+
 
 void UpdatePWM1(uint8_t DutyCycle) //desiredDutyCycle varies from 0-100;
 {
@@ -546,9 +703,10 @@ void InitPeripherals()
 
 
 	  InitGPIO();
-	  InitPWM1();
-	  InitPWM2();
+	 // InitPWM1();
+	//  InitPWM2();
 
+	  InitPWMs();
 
 	  UpdatePWM1(50);
 	  ChangePWMoutput();
